@@ -1,0 +1,13 @@
+node_modules/
+dist/
+companion/node_modules/
+companion/dist/
+relay/node_modules/
+.env
+.env.*
+*.ehpk
+*.log
+*.png
+Enable-Codex-Lens-Gateway.cmd
+server/gateway.mjs
+server/README.md

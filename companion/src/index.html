@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'" />
+    <title>Codex Lens Companion</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="mark">CL</div>
+        <div>
+          <p class="eyebrow">EVEN G2 + R1</p>
+          <h1>Codex Lens Companion</h1>
+          <p>Your Codex login and chat history stay on this computer.</p>
+        </div>
+      </header>
+
+      <section class="status-row" aria-label="Connection status">
+        <div><span id="codex-dot" class="dot"></span><strong>Codex</strong><span id="codex-status">Starting</span></div>
+        <div><span id="relay-dot" class="dot"></span><strong>Secure relay</strong><span id="relay-status">Connecting</span></div>
+      </section>
+
+      <section class="steps">
+        <article id="step-signin" class="step">
+          <div class="number">1</div>
+          <div class="step-copy">
+            <h2>Sign in to your Codex account</h2>
+            <p id="account-copy">A secure OpenAI page opens in your browser. Your password never enters Codex Lens.</p>
+            <div id="login-code-wrap" class="login-code hidden">
+              <span>One-time code</span><strong id="login-code"></strong>
+            </div>
+            <button id="sign-in">Sign in to Codex</button>
+            <button id="sign-out" class="secondary hidden">Sign out</button>
+          </div>
+        </article>
+
+        <article id="step-scan" class="step locked">
+          <div class="number">2</div>
+          <div class="step-copy scan-grid">
+            <div>
+              <h2>Scan this QR with the Even phone app</h2>
+              <ol>
+                <li>Install and open <strong>Codex Lens</strong> in the Even app.</li>
+                <li>Tap <strong>Scan companion QR</strong> on the phone.</li>
+                <li>Point the phone camera at this code.</li>
+              </ol>
+              <p class="privacy">Only a short-lived pairing secret is in this QR—never your OpenAI password or token.</p>
+              <button id="retry" class="secondary">Refresh connection</button>
+            </div>
+            <div class="qr-card">
+              <img id="qr" alt="Codex Lens pairing QR code" />
+              <div id="qr-loading" class="qr-loading">Preparing secure QR…</div>
+              <span>Pair code <strong id="pair-code">------</strong></span>
+            </div>
+          </div>
+        </article>
+
+        <article class="step compact">
+          <div class="number">3</div>
+          <div class="step-copy">
+            <h2>Put on your G2 and start talking</h2>
+            <p>Hold the ring or temple to speak. Use scroll and click gestures to browse chats or compose text.</p>
+          </div>
+        </article>
+      </section>
+
+      <p id="error" class="error hidden" role="alert"></p>
+      <footer>Keep this companion running while you use Codex Lens. Requests are read-only and interactive approvals are disabled.</footer>
+    </main>
+    <script src="renderer.js"></script>
+  </body>
+</html>
