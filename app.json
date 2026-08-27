@@ -13,7 +13,7 @@
     {
       "name": "network",
       "desc": "Connect through the encrypted Codex Lens relay to the user's own desktop companion.",
-      "whitelist": ["http://127.0.0.1:8790"]
+      "whitelist": ["https://codex-lens-production.up.railway.app"]
     },
     {
       "name": "g2-microphone",
