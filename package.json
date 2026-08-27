@@ -1,0 +1,23 @@
+{
+  "name": "codex-lens-g2",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "pack": "npm run build && evenhub pack app.json dist -o codex-lens-g2-v0.2.0.ehpk",
+    "simulate": "evenhub-simulator http://localhost:5173"
+  },
+  "dependencies": {
+    "@evenrealities/even_hub_sdk": "0.0.14",
+    "jsqr": "1.4.0"
+  },
+  "devDependencies": {
+    "@evenrealities/evenhub-cli": "^0.1.14",
+    "@evenrealities/evenhub-simulator": "^0.9.3",
+    "typescript": "5.9.3",
+    "vite": "8.2.2"
+  }
+}
