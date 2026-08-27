@@ -9,8 +9,8 @@ import QRCode from 'qrcode'
 import WebSocket from 'ws'
 import { CodexService } from './codex-service.mjs'
 
-const RELAY_WS = process.env.CODEX_LENS_RELAY_WS || 'ws://127.0.0.1:8790/companion'
-const RELAY_HTTPS = process.env.CODEX_LENS_RELAY_HTTPS || 'http://127.0.0.1:8790'
+const RELAY_WS = process.env.CODEX_LENS_RELAY_WS || 'wss://codex-lens-production.up.railway.app/companion'
+const RELAY_HTTPS = process.env.CODEX_LENS_RELAY_HTTPS || 'https://codex-lens-production.up.railway.app'
 const deviceConfigPath = () => path.join(app.getPath('userData'), 'device.json')
 
 let window
