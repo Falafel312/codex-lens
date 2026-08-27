@@ -1,0 +1,56 @@
+{
+  "name": "codex-lens-companion",
+  "version": "0.2.0",
+  "description": "Private desktop bridge between a user's Codex account and Codex Lens for Even G2.",
+  "author": "Sam Wolfsdell",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis",
+    "dist:dir": "electron-builder --dir"
+  },
+  "dependencies": {
+    "@openai/codex": "0.150.1",
+    "qrcode": "1.5.4",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "electron": "44.0.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.samwolfsdell.codexlens.companion",
+    "productName": "Codex Lens Companion",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/@openai/codex/**",
+      "node_modules/@openai/codex-*/**"
+    ],
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../server/codex-app-server.mjs",
+        "to": "server/codex-app-server.mjs"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "Codex-Lens-Companion-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
