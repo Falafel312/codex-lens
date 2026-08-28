@@ -40,6 +40,15 @@ function randomToken(bytes = 24) {
   return randomBytes(bytes).toString('base64url')
 }
 
+function createPairCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  return [...randomBytes(16)].map(value => alphabet[value & 31]).join('')
+}
+
+function formatPairCode(value) {
+  return value.match(/.{1,4}/g)?.join('-') || value
+}
+
 function argumentValue(name) {
   return process.argv.find(argument => argument.startsWith(`${name}=`))?.slice(name.length + 1) || ''
 }
@@ -144,7 +153,7 @@ async function startCodex() {
 }
 
 async function updatePairingQr() {
-  pairSecret = randomToken(24)
+  pairSecret = createPairCode()
   const payload = JSON.stringify({
     version: 1,
     relay: RELAY_HTTPS,
@@ -152,7 +161,7 @@ async function updatePairingQr() {
     pairSecret,
   })
   const qrDataUrl = await QRCode.toDataURL(payload, { width: 360, margin: 2, errorCorrectionLevel: 'M' })
-  emitState({ qrDataUrl, pairCode: pairSecret.slice(0, 6).toUpperCase() })
+  emitState({ qrDataUrl, pairCode: formatPairCode(pairSecret) })
 }
 
 function publishPairHash() {

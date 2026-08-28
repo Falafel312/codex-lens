@@ -13,6 +13,8 @@ export type SavedConnection = PairingQr & {
 export type CodexThread = { id: string; title: string; preview: string; updatedAt?: string | number }
 export type ChatMessage = { id: string; role: 'user' | 'assistant'; text: string }
 
+const DEFAULT_RELAY = 'https://codex-lens-production.up.railway.app'
+
 let connection: SavedConnection | null = null
 
 function bytesToBase64Url(bytes: Uint8Array) {
@@ -108,6 +110,28 @@ export async function claimPairing(qr: PairingQr): Promise<SavedConnection> {
     body: JSON.stringify({ deviceId: qr.deviceId, pairHash: await pairHash(qr.pairSecret) }),
   })
   connection = { ...qr, ...result }
+  return connection
+}
+
+export async function claimPairingCode(value: string): Promise<SavedConnection> {
+  const pairSecret = value.toUpperCase().replace(/[^A-Z2-9]/g, '')
+  if (pairSecret.length !== 16) throw new Error('Enter the complete 16-character pair code shown by the companion.')
+  const result = await jsonFetch<{ deviceId: string; sessionToken: string; sessionId: string }>(
+    `${DEFAULT_RELAY}/v1/pair/code`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ pairHash: await pairHash(pairSecret) }),
+    },
+  )
+  connection = {
+    version: 1,
+    relay: DEFAULT_RELAY,
+    deviceId: result.deviceId,
+    pairSecret,
+    sessionToken: result.sessionToken,
+    sessionId: result.sessionId,
+  }
   return connection
 }
 

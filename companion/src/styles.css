@@ -38,7 +38,8 @@ li + li { margin-top: 5px; }
 .qr-card { padding: 13px; border-radius: 15px; background: white; color: #111; text-align: center; }
 .qr-card img { display: block; width: 100%; aspect-ratio: 1; }
 .qr-loading { width: 100%; aspect-ratio: 1; display: grid; place-items: center; background: #f0f2f4; border-radius: 8px; color: #5c6268; font-size: 13px; }
-.qr-card span { display: block; padding: 7px 0 2px; font-size: 12px; letter-spacing: .06em; }
+.qr-card span { display: block; padding: 7px 0 2px; font-size: 12px; letter-spacing: .04em; }
+.qr-card span strong { display: block; margin-top: 3px; font-size: 15px; letter-spacing: .08em; }
 .login-code { display: inline-flex; align-items: center; gap: 12px; margin: 0 10px 12px 0; padding: 10px 13px; border: 1px solid #3c4b59; border-radius: 10px; background: #0c1219; }
 .login-code span { color: #8f9aa7; font-size: 12px; }
 .login-code strong { color: #81f4c4; font-size: 19px; letter-spacing: .12em; }

@@ -11,6 +11,7 @@ import {
   CodexThread,
   SavedConnection,
   claimPairing,
+  claimPairingCode,
   codexApi,
   currentRelay,
   parsePairingQr,
@@ -32,6 +33,9 @@ type Screen = 'boot' | 'setup' | 'threads' | 'settings' | 'chat' | 'compose' | '
 
 const statusElement = document.querySelector<HTMLElement>('#status')
 const scanButton = document.querySelector<HTMLButtonElement>('#scan-qr')
+const manualPairPanel = document.querySelector<HTMLElement>('#manual-pair')
+const pairCodeInput = document.querySelector<HTMLInputElement>('#pair-code')
+const pairCodeButton = document.querySelector<HTMLButtonElement>('#use-pair-code')
 const resetButton = document.querySelector<HTMLButtonElement>('#reset-pairing')
 const scannerPanel = document.querySelector<HTMLElement>('#qr-scanner')
 const scannerVideo = document.querySelector<HTMLVideoElement>('#qr-video')
@@ -169,6 +173,7 @@ async function showThreads() {
   })
   setPhoneStatus(`Connected securely through ${currentRelay()}`)
   if (scanButton) scanButton.hidden = true
+  if (manualPairPanel) manualPairPanel.hidden = true
   if (resetButton) resetButton.hidden = false
 }
 
@@ -378,12 +383,13 @@ async function sendDraft() {
 
 async function showSetup() {
   screen = 'setup'
-  setPhoneStatus('Step 3: tap Scan companion QR. Allow camera access when Even asks.')
+  setPhoneStatus('Scan the companion QR, or enter its one-time pair code below.')
   if (scanButton) scanButton.hidden = false
+  if (manualPairPanel) manualPairPanel.hidden = false
   if (resetButton) resetButton.hidden = true
   await renderText(
     'CONNECT CODEX LENS',
-    'Finish setup on your phone.\n\nTap Scan companion QR, allow camera access, and point the phone at the code shown on your PC.',
+    'Finish setup on your phone.\n\nScan the companion QR, or enter the one-time pair code shown on your PC.',
     'Keep Codex Lens Companion open',
   )
 }
@@ -559,19 +565,34 @@ async function decodeQrFromPhoneCamera() {
   return decodeQrFromNativeCamera()
 }
 
+async function finishPairing(saved: SavedConnection) {
+  await bridge.setLocalStorage(PAIRING_STORAGE_KEY, JSON.stringify(saved))
+  await renderText('CONNECTED', 'Your Codex account is ready.', 'Loading conversations…')
+  await loadThreads()
+}
+
 async function scanAndPair() {
   if (scanButton) scanButton.disabled = true
   setPhoneStatus('Opening QR scanner…')
   try {
     const qr = parsePairingQr(await decodeQrFromPhoneCamera())
     setPhoneStatus('Connecting securely…')
-    const saved = await claimPairing(qr)
-    await bridge.setLocalStorage(PAIRING_STORAGE_KEY, JSON.stringify(saved))
-    await renderText('CONNECTED', 'Your Codex account is ready.', 'Loading conversations…')
-    await loadThreads()
+    await finishPairing(await claimPairing(qr))
   } finally {
     stopLiveScanner()
     if (scanButton) scanButton.disabled = false
+  }
+}
+
+async function enterPairCode() {
+  if (!pairCodeInput?.value) throw new Error('Enter the pair code shown by Codex Lens Companion.')
+  if (pairCodeButton) pairCodeButton.disabled = true
+  setPhoneStatus('Checking one-time pair code…')
+  try {
+    await finishPairing(await claimPairingCode(pairCodeInput.value))
+    pairCodeInput.value = ''
+  } finally {
+    if (pairCodeButton) pairCodeButton.disabled = false
   }
 }
 
@@ -743,6 +764,15 @@ async function boot() {
 }
 
 scanButton?.addEventListener('click', () => void scanAndPair().catch(showError))
+pairCodeInput?.addEventListener('input', () => {
+  const normalized = pairCodeInput.value.toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 16)
+  pairCodeInput.value = normalized.match(/.{1,4}/g)?.join('-') || normalized
+})
+pairCodeButton?.addEventListener('click', () => {
+  void enterPairCode().catch(error => {
+    setPhoneStatus(error instanceof Error ? error.message : String(error))
+  })
+})
 resetButton?.addEventListener('click', () => {
   void bridge.setLocalStorage(PAIRING_STORAGE_KEY, '').then(showSetup).catch(showError)
 })

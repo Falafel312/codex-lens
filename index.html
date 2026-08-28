@@ -33,6 +33,11 @@
       button { width: 100%; margin-top: 16px; border: 0; border-radius: 999px; padding: 14px 18px; background: #e7ff69; color: #111; font: inherit; font-weight: 900; }
       button:disabled { opacity: .55; }
       button.secondary { background: transparent; color: #d7dee8; border: 1px solid #656c75; }
+      .manual-pair { margin-top: 14px; padding: 14px; border: 1px solid #4b535d; border-radius: 14px; background: #1b1b1b; }
+      .manual-pair[hidden] { display: none; }
+      .manual-pair label { display: block; margin-bottom: 7px; color: #cbd2da; font-size: 12px; font-weight: 700; }
+      .manual-pair input { width: 100%; box-sizing: border-box; border: 1px solid #656c75; border-radius: 10px; padding: 13px; background: #101010; color: #e7ff69; font: 800 18px/1 ui-monospace, monospace; letter-spacing: .08em; text-align: center; text-transform: uppercase; }
+      .manual-pair button { margin-top: 10px; }
       #status { display: block; margin-top: 16px; color: #b9dcff; min-height: 40px; }
       .privacy { color: #8e969f; font-size: 11px; margin-top: 18px; }
       #qr-scanner { margin-top: 16px; padding: 12px; border: 1px solid #656c75; border-radius: 16px; background: #151515; }
@@ -55,9 +60,14 @@
           <a class="download-url" href="https://codex-lens-production.up.railway.app" target="_blank" rel="noopener noreferrer">codex-lens-production.up.railway.app</a>
         </li>
         <li>Sign into your Codex account<span>The companion opens the official Codex sign-in in your browser.</span></li>
-        <li>Scan the companion QR<span>Tap below and allow camera access when Even Realities asks.</span></li>
+        <li>Pair with your companion<span>Scan the QR, or enter its one-time pair code below.</span></li>
       </ol>
       <button id="scan-qr" hidden>Scan companion QR</button>
+      <section id="manual-pair" class="manual-pair" hidden>
+        <label for="pair-code">Camera not working? Enter the one-time pair code from your PC.</label>
+        <input id="pair-code" inputmode="text" autocomplete="one-time-code" maxlength="19" placeholder="XXXX-XXXX-XXXX-XXXX" />
+        <button id="use-pair-code">Use pair code</button>
+      </section>
       <section id="qr-scanner" hidden>
         <div class="camera-frame">
           <video id="qr-video" autoplay muted playsinline></video>

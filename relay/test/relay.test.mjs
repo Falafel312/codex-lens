@@ -43,12 +43,13 @@ test('pairs once and routes only encrypted Codex payloads', async () => {
   })
 
   const paired = new Promise(resolve => socket.once('message', raw => resolve(JSON.parse(String(raw)))))
-  const claim = await fetch(`${origin}/v1/pair/claim`, {
+  const claim = await fetch(`${origin}/v1/pair/code`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ deviceId: 'test-device', pairHash: pairHash(secret) }),
+    body: JSON.stringify({ pairHash: pairHash(secret) }),
   }).then(response => response.json())
   const pairedMessage = await paired
+  assert.equal(claim.deviceId, 'test-device')
   assert.equal(pairedMessage.type, 'paired')
   assert.equal(pairedMessage.sessionId, claim.sessionId)
 

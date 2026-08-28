@@ -11,6 +11,7 @@ const MAX_BODY_BYTES = 14 * 1024 * 1024
 const devices = new Map()
 const sessions = new Map()
 const pending = new Map()
+const pairCodeAttempts = new Map()
 
 const token = (bytes = 24) => randomBytes(bytes).toString('base64url')
 
@@ -67,19 +68,40 @@ function sessionFrom(request) {
   return { ...session, token: sessionToken }
 }
 
+function allowPairCodeAttempt(request) {
+  const address = String(request.headers['x-forwarded-for'] || request.socket.remoteAddress || '').split(',')[0].trim()
+  const now = Date.now()
+  const current = pairCodeAttempts.get(address)
+  if (!current || current.resetAt <= now) {
+    pairCodeAttempts.set(address, { count: 1, resetAt: now + 60_000 })
+    return true
+  }
+  current.count += 1
+  return current.count <= 12
+}
+
+function completePairing(response, deviceId, device) {
+  const sessionId = token(18)
+  const sessionToken = token(32)
+  sessions.set(sessionToken, { id: sessionId, deviceId, expiresAt: Date.now() + SESSION_TTL_MS })
+  device.pairHash = ''
+  device.socket.send(JSON.stringify({ type: 'paired', sessionId }))
+  return sendJson(response, 200, { deviceId, sessionToken, sessionId, expiresAt: Date.now() + SESSION_TTL_MS })
+}
+
 const home = () => `<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Codex Lens</title><style>
 body{margin:0;background:#0b0e13;color:#edf2f7;font:16px/1.55 system-ui,sans-serif}main{max-width:760px;margin:auto;padding:64px 24px}h1{font-size:48px;margin:0 0 8px}.tag{color:#8bb8ff;font-weight:700}.card{background:#151b25;border:1px solid #2b3546;border-radius:18px;padding:24px;margin:28px 0}li{margin:12px 0}a.button{display:inline-block;background:#e7ff69;color:#111;padding:13px 20px;border-radius:999px;text-decoration:none;font-weight:800}small,a{color:#a9b8ce}
 </style><main><div class="tag">EVEN G2 + R1</div><h1>Codex Lens</h1><p>Use your own Codex chats from your glasses—by voice or ring and temple gestures.</p>
-<div class="card"><h2>Set up in three steps</h2><ol><li>Download and open Codex Lens Companion on your Windows PC.</li><li>Confirm a Codex account already stored in your own Windows profile, or sign into your own account.</li><li>Open Codex Lens in Even Hub, start the live QR scanner, and point your phone at the QR shown on your PC.</li></ol>
+<div class="card"><h2>Set up in three steps</h2><ol><li>Download and open Codex Lens Companion on your Windows PC.</li><li>Confirm a Codex account already stored in your own Windows profile, or sign into your own account.</li><li>Open Codex Lens in Even Hub. Scan the QR, or enter the one-time pair code shown on your PC.</li></ol>
 ${DOWNLOAD_URL ? `<a class="button" href="${DOWNLOAD_URL}">Download for Windows</a>` : '<p><strong>The Windows download is being prepared.</strong></p>'}</div>
 <p><small>No developer account is bundled. Your OpenAI login stays on your PC, and no QR photo is saved. Prompts and responses are end-to-end encrypted between the Even app and your companion. The relay only routes encrypted data.</small></p>
 <p><a href="/privacy">Privacy</a> · <a href="/support">Setup & support</a></p></main></html>`
 
-const privacy = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Codex Lens Privacy</title><style>body{max-width:760px;margin:50px auto;padding:0 24px;background:#0b0e13;color:#edf2f7;font:16px/1.6 system-ui}a{color:#8bb8ff}</style><h1>Privacy</h1><p>Codex Lens Companion uses the Codex sign-in stored on your own computer. OpenAI credentials are never sent to the Codex Lens relay.</p><p>The QR code creates an end-to-end encrypted connection. The relay processes device identifiers, short-lived session identifiers, encrypted payloads, connection timing, and basic operational logs. It cannot decrypt prompt or conversation content.</p><p>No conversation database is maintained by the relay. Your Codex history remains in your own Codex account and local Codex installation.</p><p><a href="/">Back to setup</a></p>`
+const privacy = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Codex Lens Privacy</title><style>body{max-width:760px;margin:50px auto;padding:0 24px;background:#0b0e13;color:#edf2f7;font:16px/1.6 system-ui}a{color:#8bb8ff}</style><h1>Privacy</h1><p>Codex Lens Companion uses the Codex sign-in stored on your own computer. OpenAI credentials are never sent to the Codex Lens relay.</p><p>The QR or one-time pair code creates an end-to-end encrypted connection. The relay receives only a hash of the pair credential, plus device identifiers, short-lived session identifiers, encrypted payloads, connection timing, and basic operational logs. It cannot decrypt prompt or conversation content.</p><p>No conversation database is maintained by the relay. Your Codex history remains in your own Codex account and local Codex installation.</p><p><a href="/">Back to setup</a></p>`
 
-const support = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Codex Lens Setup</title><style>body{max-width:760px;margin:50px auto;padding:0 24px;background:#0b0e13;color:#edf2f7;font:16px/1.6 system-ui}li{margin:12px 0}a{color:#8bb8ff}</style><h1>Setup & support</h1><ol><li>Download Codex Lens Companion from this site, install it, and leave it open.</li><li>If the companion finds a Codex login in your own Windows profile, choose <strong>Continue with this account</strong> or sign out and use a different account. Otherwise choose <strong>Sign in to Codex</strong> and complete the official browser sign-in.</li><li>Wait for the secure relay to say <strong>Online</strong>. The QR appears only after you confirm your account.</li><li>Open Codex Lens from the Even Hub app on your phone and tap <strong>Start live QR scanner</strong>.</li><li>Point the live camera at the one-time QR on your PC. Pairing finishes automatically and no QR photo is saved.</li><li>Put on your G2. Scroll to choose a chat, tap to open/type, or hold the R1/temple to speak.</li></ol><p>Each person uses their own Codex account and plan. No developer login, email, or token is included in the app.</p><h2>If it does not connect</h2><p>Keep the companion running, confirm the PC has internet, then press Retry in the companion and scan the newest QR. Each QR can be used once.</p><p><a href="/">Back to download</a></p>`
+const support = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Codex Lens Setup</title><style>body{max-width:760px;margin:50px auto;padding:0 24px;background:#0b0e13;color:#edf2f7;font:16px/1.6 system-ui}li{margin:12px 0}a{color:#8bb8ff}</style><h1>Setup & support</h1><ol><li>Download Codex Lens Companion from this site, install it, and leave it open.</li><li>If the companion finds a Codex login in your own Windows profile, choose <strong>Continue with this account</strong> or sign out and use a different account. Otherwise choose <strong>Sign in to Codex</strong> and complete the official browser sign-in.</li><li>Wait for the secure relay to say <strong>Online</strong>. Pairing options appear only after you confirm your account.</li><li>Open Codex Lens from the Even Hub app on your phone.</li><li>Scan the QR, or enter the 16-character one-time pair code shown on the PC.</li><li>Put on your G2. Scroll to choose a chat, tap to open/type, or hold the R1/temple to speak.</li></ol><p>Each person uses their own Codex account and plan. No developer login, email, or token is included in the app.</p><h2>If it does not connect</h2><p>Keep the companion running, confirm the PC has internet, then press Retry in the companion and use the newest QR or pair code. Each credential can be used once.</p><p><a href="/">Back to download</a></p>`
 
 const server = createServer(async (request, response) => {
   try {
@@ -98,12 +120,21 @@ const server = createServer(async (request, response) => {
       if (!device || device.socket.readyState !== WebSocket.OPEN || !safeEqual(device.pairHash, body.pairHash)) {
         return sendJson(response, 404, { message: 'This QR is invalid, expired, or the companion is offline.' })
       }
-      const sessionId = token(18)
-      const sessionToken = token(32)
-      sessions.set(sessionToken, { id: sessionId, deviceId: body.deviceId, expiresAt: Date.now() + SESSION_TTL_MS })
-      device.pairHash = ''
-      device.socket.send(JSON.stringify({ type: 'paired', sessionId }))
-      return sendJson(response, 200, { sessionToken, sessionId, expiresAt: Date.now() + SESSION_TTL_MS })
+      return completePairing(response, body.deviceId, device)
+    }
+
+    if (request.method === 'POST' && url.pathname === '/v1/pair/code') {
+      if (!allowPairCodeAttempt(request)) {
+        return sendJson(response, 429, { message: 'Too many pair-code attempts. Wait one minute and try again.' })
+      }
+      const body = await readJson(request)
+      const match = [...devices.entries()].find(([, device]) =>
+        device.socket.readyState === WebSocket.OPEN && safeEqual(device.pairHash, body.pairHash),
+      )
+      if (!match) {
+        return sendJson(response, 404, { message: 'This pair code is invalid, expired, or the companion is offline.' })
+      }
+      return completePairing(response, match[0], match[1])
     }
 
     if (request.method === 'POST' && url.pathname === '/v1/proxy') {
@@ -176,6 +207,7 @@ sockets.on('connection', (socket, auth) => {
 const cleanup = setInterval(() => {
   const now = Date.now()
   for (const [sessionToken, session] of sessions) if (session.expiresAt <= now) sessions.delete(sessionToken)
+  for (const [address, attempt] of pairCodeAttempts) if (attempt.resetAt <= now) pairCodeAttempts.delete(address)
 }, 60_000)
 cleanup.unref()
 
