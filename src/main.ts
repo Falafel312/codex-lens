@@ -271,7 +271,7 @@ function stopLiveScanner() {
 }
 
 async function decodeQrFromNativeCamera() {
-  setPhoneStatus('Allow camera access for Even Realities, then point the camera at the companion QR.')
+  setPhoneStatus('Fill most of the camera view with the companion QR, keep it square, then capture.')
   const asset = await bridge.captureImageFromCamera()
   if (!asset) throw new Error('Camera scan cancelled. Tap Scan companion QR to try again.')
   const source = asset.base64.startsWith('data:')
@@ -283,16 +283,81 @@ async function decodeQrFromNativeCamera() {
     image.onload = () => resolve()
     image.onerror = () => reject(new Error('The camera image could not be opened.'))
   })
-  const canvas = document.createElement('canvas')
-  canvas.width = image.naturalWidth
-  canvas.height = image.naturalHeight
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context) throw new Error('The QR scanner is unavailable on this phone.')
-  context.drawImage(image, 0, 0)
-  const pixels = context.getImageData(0, 0, canvas.width, canvas.height)
-  const result = jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: 'attemptBoth' })
-  if (!result?.data) throw new Error('No QR code was found. Fill the camera view with the companion QR and try again.')
-  return result.data
+  const result = decodeQrFromCapturedImage(image)
+  if (!result) {
+    throw new Error('No QR code was found. Move closer so the QR nearly fills the camera square, avoid screen glare, and try again.')
+  }
+  return result
+}
+
+function decodeQrPixels(pixels: ImageData) {
+  const direct = jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: 'attemptBoth' })
+  if (direct?.data) return direct.data
+
+  const contrasted = new Uint8ClampedArray(pixels.data)
+  for (let index = 0; index < contrasted.length; index += 4) {
+    const luminance = Math.round(
+      contrasted[index] * 0.2126 + contrasted[index + 1] * 0.7152 + contrasted[index + 2] * 0.0722,
+    )
+    const value = Math.max(0, Math.min(255, Math.round((luminance - 128) * 1.9 + 128)))
+    contrasted[index] = value
+    contrasted[index + 1] = value
+    contrasted[index + 2] = value
+    contrasted[index + 3] = 255
+  }
+  return jsQR(contrasted, pixels.width, pixels.height, { inversionAttempts: 'attemptBoth' })?.data || ''
+}
+
+function decodeQrFromCapturedImage(image: HTMLImageElement) {
+  const sourceWidth = image.naturalWidth
+  const sourceHeight = image.naturalHeight
+  const shortestSide = Math.min(sourceWidth, sourceHeight)
+  const crops = [
+    { x: 0, y: 0, width: sourceWidth, height: sourceHeight },
+    ...[1, 0.82, 0.66, 0.52].map(fraction => {
+      const size = Math.max(1, Math.round(shortestSide * fraction))
+      return {
+        x: Math.round((sourceWidth - size) / 2),
+        y: Math.round((sourceHeight - size) / 2),
+        width: size,
+        height: size,
+      }
+    }),
+  ]
+
+  for (const crop of crops) {
+    for (const rotation of [0, 90, 180, 270]) {
+      const maxSide = 1400
+      const scale = Math.min(1, maxSide / Math.max(crop.width, crop.height))
+      const drawnWidth = Math.max(1, Math.round(crop.width * scale))
+      const drawnHeight = Math.max(1, Math.round(crop.height * scale))
+      const sideways = rotation === 90 || rotation === 270
+      const canvas = document.createElement('canvas')
+      canvas.width = sideways ? drawnHeight : drawnWidth
+      canvas.height = sideways ? drawnWidth : drawnHeight
+      const context = canvas.getContext('2d', { willReadFrequently: true })
+      if (!context) continue
+      context.imageSmoothingEnabled = true
+      context.imageSmoothingQuality = 'high'
+      context.translate(canvas.width / 2, canvas.height / 2)
+      context.rotate((rotation * Math.PI) / 180)
+      context.drawImage(
+        image,
+        crop.x,
+        crop.y,
+        crop.width,
+        crop.height,
+        -drawnWidth / 2,
+        -drawnHeight / 2,
+        drawnWidth,
+        drawnHeight,
+      )
+      context.setTransform(1, 0, 0, 1, 0, 0)
+      const decoded = decodeQrPixels(context.getImageData(0, 0, canvas.width, canvas.height))
+      if (decoded) return decoded
+    }
+  }
+  return ''
 }
 
 async function decodeQrFromLiveCamera(): Promise<string | null> {
