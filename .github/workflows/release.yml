@@ -1,0 +1,33 @@
+name: Release Windows companion
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  windows-companion:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: companion
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: companion/package-lock.json
+      - run: npm ci
+      - run: npm run dist:win
+      - name: Create stable download name
+        shell: pwsh
+        run: Copy-Item -LiteralPath 'dist\Codex-Lens-Companion-Setup-0.3.1.exe' -Destination 'dist\Codex-Lens-Companion-Setup.exe'
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create '${{ github.ref_name }}' 'dist\Codex-Lens-Companion-Setup-0.3.1.exe' 'dist\Codex-Lens-Companion-Setup.exe' --generate-notes --title 'Codex Lens ${{ github.ref_name }}'

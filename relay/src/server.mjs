@@ -3,7 +3,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { WebSocketServer, WebSocket } from 'ws'
 
 const PORT = Number(process.env.PORT || 8790)
-const DOWNLOAD_URL = process.env.DOWNLOAD_URL || ''
+const DOWNLOAD_URL = 'https://github.com/Falafel312/codex-lens/releases/latest/download/Codex-Lens-Companion-Setup.exe'
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const REQUEST_TIMEOUT_MS = 5 * 60 * 1000
 const MAX_BODY_BYTES = 14 * 1024 * 1024
