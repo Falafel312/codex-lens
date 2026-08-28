@@ -1,42 +1,48 @@
-const GROUPS = [
-  'abc',
-  'def',
-  'ghi',
-  'jkl',
-  'mno',
-  'pqrs',
-  'tuv',
-  'wxyz',
-  ' 0123456789',
-  '.,?!-_/\'"',
-]
+const KEYS = [
+  { label: 'ABC', characters: 'abc' },
+  { label: 'DEF', characters: 'def' },
+  { label: 'GHI', characters: 'ghi' },
+  { label: 'JKL', characters: 'jkl' },
+  { label: 'MNO', characters: 'mno' },
+  { label: 'PQRS', characters: 'pqrs' },
+  { label: 'TUV', characters: 'tuv' },
+  { label: 'WXYZ', characters: 'wxyz' },
+  { label: 'SPACE', characters: ' ' },
+  { label: '.,?!', characters: '.,?!' },
+  { label: '123', characters: '0123456789' },
+] as const
 
 export class GestureKeyboard {
   draft = ''
-  private groupIndex = 0
-  private characterIndex: number | null = null
+  private keyIndex = 0
+  private pendingIndex: number | null = null
 
   move(delta: number) {
-    if (this.characterIndex === null) {
-      this.groupIndex = (this.groupIndex + delta + GROUPS.length) % GROUPS.length
-      return
-    }
-    const group = GROUPS[this.groupIndex]
-    this.characterIndex = (this.characterIndex + delta + group.length) % group.length
+    this.commitPending()
+    this.keyIndex = (this.keyIndex + delta + KEYS.length) % KEYS.length
   }
 
-  select() {
-    if (this.characterIndex === null) {
-      this.characterIndex = 0
-      return
+  tap() {
+    const key = KEYS[this.keyIndex]
+    if (key.characters === ' ') {
+      this.commitPending()
+      if (this.draft && !this.draft.endsWith(' ')) this.draft += ' '
+      return false
     }
-    this.draft += GROUPS[this.groupIndex][this.characterIndex]
-    this.characterIndex = null
+    this.pendingIndex = this.pendingIndex === null ? 0 : (this.pendingIndex + 1) % key.characters.length
+    return true
+  }
+
+  commitPending() {
+    if (this.pendingIndex === null) return false
+    this.draft += KEYS[this.keyIndex].characters[this.pendingIndex]
+    this.pendingIndex = null
+    return true
   }
 
   backspace() {
-    if (this.characterIndex !== null) {
-      this.characterIndex = null
+    if (this.pendingIndex !== null) {
+      this.pendingIndex = null
       return
     }
     this.draft = this.draft.slice(0, -1)
@@ -44,20 +50,27 @@ export class GestureKeyboard {
 
   reset() {
     this.draft = ''
-    this.groupIndex = 0
-    this.characterIndex = null
+    this.keyIndex = 0
+    this.pendingIndex = null
   }
 
-  get selection() {
-    const group = GROUPS[this.groupIndex]
-    if (this.characterIndex === null) return `[ ${group.toUpperCase()} ]`
-    return group
-      .split('')
-      .map((character, index) => (index === this.characterIndex ? `[${character === ' ' ? 'SPACE' : character}]` : character))
-      .join('  ')
+  get keys() {
+    return KEYS
   }
 
-  get level() {
-    return this.characterIndex === null ? 'group' : 'character'
+  get selectedKeyIndex() {
+    return this.keyIndex
+  }
+
+  get selectedKey() {
+    return KEYS[this.keyIndex]
+  }
+
+  get pendingCharacter() {
+    return this.pendingIndex === null ? '' : KEYS[this.keyIndex].characters[this.pendingIndex]
+  }
+
+  get displayDraft() {
+    return `${this.draft}${this.pendingCharacter}`
   }
 }

@@ -1,12 +1,8 @@
 import jsQR from 'jsqr'
 import {
   AudioInputSource,
-  CreateStartUpPageContainer,
   EventSourceType,
   OsEventTypeList,
-  RebuildPageContainer,
-  TextContainerProperty,
-  TextContainerUpgrade,
   waitForEvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 import { pcmFramesToWavBase64 } from './audio'
@@ -20,9 +16,19 @@ import {
   parsePairingQr,
   useConnection,
 } from './api'
+import {
+  GlassesDisplay,
+  TEXT_SIZE_OPTIONS,
+  cleanText,
+  ellipsize,
+  relativeTime,
+  typography,
+  wrapText,
+  type TextSize,
+} from './display'
 import { GestureKeyboard } from './keyboard'
 
-type Screen = 'boot' | 'setup' | 'threads' | 'chat' | 'compose' | 'recording' | 'sending' | 'error'
+type Screen = 'boot' | 'setup' | 'threads' | 'settings' | 'chat' | 'compose' | 'recording' | 'sending' | 'error'
 
 const statusElement = document.querySelector<HTMLElement>('#status')
 const scanButton = document.querySelector<HTMLButtonElement>('#scan-qr')
@@ -31,110 +37,84 @@ const scannerPanel = document.querySelector<HTMLElement>('#qr-scanner')
 const scannerVideo = document.querySelector<HTMLVideoElement>('#qr-video')
 const cancelScanButton = document.querySelector<HTMLButtonElement>('#cancel-scan')
 const PAIRING_STORAGE_KEY = 'codex-lens-connection-v2'
+const SETTINGS_STORAGE_KEY = 'codex-lens-settings-v1'
+const demoMode = import.meta.env.DEV && new URLSearchParams(location.search).has('demo')
 const setPhoneStatus = (message: string) => {
   if (statusElement) statusElement.textContent = message
 }
 
 const bridge = await waitForEvenAppBridge()
 const keyboard = new GestureKeyboard()
-
-const headerContainer = () =>
-  new TextContainerProperty({
-    xPosition: 0,
-    yPosition: 0,
-    width: 576,
-    height: 38,
-    borderWidth: 0,
-    borderColor: 5,
-    paddingLength: 4,
-    containerID: 1,
-    containerName: 'header',
-    content: 'CODEX LENS',
-    isEventCapture: 0,
-  })
-
-const bodyContainer = () =>
-  new TextContainerProperty({
-    xPosition: 0,
-    yPosition: 40,
-    width: 576,
-    height: 202,
-    borderWidth: 0,
-    borderColor: 5,
-    paddingLength: 6,
-    containerID: 2,
-    containerName: 'body',
-    content: 'Starting…',
-    isEventCapture: 1,
-  })
-
-const footerContainer = () =>
-  new TextContainerProperty({
-    xPosition: 0,
-    yPosition: 244,
-    width: 576,
-    height: 44,
-    borderWidth: 0,
-    borderColor: 5,
-    paddingLength: 4,
-    containerID: 3,
-    containerName: 'footer',
-    content: '',
-    isEventCapture: 0,
-  })
-
-const created = await bridge.createStartUpPageContainer(
-  new CreateStartUpPageContainer({
-    containerTotalNum: 3,
-    textObject: [headerContainer(), bodyContainer(), footerContainer()],
-  }),
-)
+const display = new GlassesDisplay(bridge)
+const created = await bridge.createStartUpPageContainer(display.startupPage())
 
 if (created !== 0) throw new Error(`G2 page creation failed (${created})`)
 
 let screen: Screen = 'boot'
-let layout: 'text' | 'qr' = 'text'
 let threads: CodexThread[] = []
 let selectedThreadIndex = 0
+let selectedSettingsIndex = 0
 let currentThread: CodexThread | null = null
 let messages: ChatMessage[] = []
 let selectedMessageIndex = 0
+let selectedMessagePage = 0
+let textSize: TextSize = 'standard'
 let audioFrames: Uint8Array[] = []
 let pairPollTimer: number | null = null
 let lastInputSource = 'G2'
 let ignoreClicksUntil = 0
 let cleanedUp = false
 let scannerStream: MediaStream | null = null
+let keyboardCommitTimer = 0
+let eventQueue: Promise<void> = Promise.resolve()
 
 function short(text: string, limit = 245) {
-  const normalized = text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
+  const normalized = cleanText(text)
   return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 1)}…`
 }
 
-async function ensureTextLayout() {
-  if (layout === 'text') return
-  await bridge.rebuildPageContainer(
-    new RebuildPageContainer({
-      containerTotalNum: 3,
-      textObject: [headerContainer(), bodyContainer(), footerContainer()],
-    }),
-  )
-  layout = 'text'
+function setFont(context: CanvasRenderingContext2D, size: number, weight: 400 | 600 | 700 = 400) {
+  context.font = `${weight} ${size}px Arial, sans-serif`
+}
+
+function drawHeader(context: CanvasRenderingContext2D, title: string, meta = '') {
+  const type = typography(textSize)
+  context.fillStyle = '#b8b8b8'
+  setFont(context, type.small, 700)
+  context.fillText('CODEX LENS', 12, 8)
+  context.fillStyle = '#ffffff'
+  setFont(context, type.title, 700)
+  context.fillText(ellipsize(context, title, meta ? 430 : 550), 12, 22)
+  if (meta) {
+    context.fillStyle = '#a8a8a8'
+    setFont(context, type.small, 600)
+    context.textAlign = 'right'
+    context.fillText(meta, 564, 28)
+    context.textAlign = 'left'
+  }
+  context.fillStyle = '#555555'
+  context.fillRect(12, 49, 552, 1)
+}
+
+function drawFooter(context: CanvasRenderingContext2D, text: string) {
+  const type = typography(textSize)
+  context.fillStyle = '#555555'
+  context.fillRect(12, 254, 552, 1)
+  context.fillStyle = '#b8b8b8'
+  setFont(context, type.small, 600)
+  context.fillText(ellipsize(context, text, 552), 12, 265)
 }
 
 async function renderText(header: string, body: string, footer: string) {
-  await ensureTextLayout()
-  await Promise.all([
-    bridge.textContainerUpgrade(
-      new TextContainerUpgrade({ containerID: 1, containerName: 'header', content: short(header, 54) }),
-    ),
-    bridge.textContainerUpgrade(
-      new TextContainerUpgrade({ containerID: 2, containerName: 'body', content: short(body, 420) }),
-    ),
-    bridge.textContainerUpgrade(
-      new TextContainerUpgrade({ containerID: 3, containerName: 'footer', content: short(footer, 90) }),
-    ),
-  ])
+  await display.render(context => {
+    const type = typography(textSize)
+    drawHeader(context, header)
+    context.fillStyle = '#ffffff'
+    setFont(context, type.body)
+    const lines = wrapText(context, body, 552).slice(0, Math.max(1, Math.floor(190 / type.line)))
+    lines.forEach((line, index) => context.fillText(line, 12, 62 + index * type.line))
+    drawFooter(context, footer)
+  })
 }
 
 function inputLabel() {
@@ -145,23 +125,64 @@ async function showThreads() {
   screen = 'threads'
   currentThread = null
   messages = []
-  const entries = [{ title: '＋ NEW CHAT' }, ...threads]
+  const entries = [
+    { kind: 'new', title: 'New chat', preview: 'Start a fresh Codex task' },
+    { kind: 'settings', title: 'Settings', preview: `Text size: ${textSize}` },
+    ...threads.map(thread => ({ kind: 'thread', ...thread })),
+  ]
   selectedThreadIndex = Math.max(0, Math.min(selectedThreadIndex, entries.length - 1))
-  const first = Math.max(0, Math.min(selectedThreadIndex - 1, Math.max(0, entries.length - 4)))
-  const body = entries
-    .slice(first, first + 4)
-    .map((entry, offset) => `${first + offset === selectedThreadIndex ? '›' : ' '} ${short(entry.title, 42)}`)
-    .join('\n')
-  await renderText('CODEX THREADS', body || 'No conversations yet.', `↕ choose  • tap open  • hold talk  • ${inputLabel()}`)
+  await display.render(context => {
+    const type = typography(textSize)
+    drawHeader(context, 'Chats', `${threads.length} recent`)
+    const availableHeight = 194
+    const visibleCount = Math.max(3, Math.floor(availableHeight / type.row))
+    const first = Math.max(0, Math.min(selectedThreadIndex - 1, Math.max(0, entries.length - visibleCount)))
+    entries.slice(first, first + visibleCount).forEach((entry, offset) => {
+      const index = first + offset
+      const selected = index === selectedThreadIndex
+      const y = 55 + offset * type.row
+      if (selected) {
+        context.fillStyle = '#252525'
+        context.fillRect(8, y - 2, 560, type.row - 3)
+        context.strokeStyle = '#ffffff'
+        context.lineWidth = 2
+        context.strokeRect(8, y - 2, 560, type.row - 3)
+      }
+      context.fillStyle = selected ? '#ffffff' : '#d0d0d0'
+      setFont(context, type.body, selected ? 700 : 600)
+      const prefix = entry.kind === 'new' ? '＋ ' : entry.kind === 'settings' ? '⚙ ' : ''
+      context.fillText(ellipsize(context, `${prefix}${entry.title}`, 455), 18, y + 2)
+      if (entry.kind === 'thread') {
+        context.fillStyle = '#8f8f8f'
+        setFont(context, type.small, 600)
+        context.textAlign = 'right'
+        context.fillText(relativeTime('updatedAt' in entry ? entry.updatedAt : undefined), 556, y + 5)
+        context.textAlign = 'left'
+      }
+      if (type.row >= 44) {
+        context.fillStyle = '#888888'
+        setFont(context, type.small)
+        context.fillText(ellipsize(context, entry.preview || '', 525), 18, y + type.body + 7)
+      }
+    })
+    drawFooter(context, `↕ Navigate   ● Open   Hold Voice   ${inputLabel()}`)
+  })
   setPhoneStatus(`Connected securely through ${currentRelay()}`)
   if (scanButton) scanButton.hidden = true
   if (resetButton) resetButton.hidden = false
 }
 
+function threadTimestamp(thread: CodexThread) {
+  const value = thread.updatedAt
+  if (typeof value === 'number') return value < 10_000_000_000 ? value * 1000 : value
+  const parsed = value ? Date.parse(value) : 0
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 async function loadThreads() {
   const response = await codexApi.listThreads()
-  threads = response.threads
-  selectedThreadIndex = 0
+  threads = [...response.threads].sort((left, right) => threadTimestamp(right) - threadTimestamp(left))
+  selectedThreadIndex = threads.length ? 2 : 0
   await showThreads()
 }
 
@@ -171,40 +192,142 @@ async function openSelectedThread() {
     currentThread = result.thread
     threads.unshift(result.thread)
     messages = []
+  } else if (selectedThreadIndex === 1) {
+    await showSettings()
+    return
   } else {
-    currentThread = threads[selectedThreadIndex - 1]
-    const result = await codexApi.getThread(currentThread.id)
-    messages = result.messages
+    currentThread = threads[selectedThreadIndex - 2]
+    if (demoMode) {
+      messages = [
+        { id: 'demo-user', role: 'user', text: 'Redesign this interface so it feels calm, readable, and useful on smart glasses.' },
+        {
+          id: 'demo-codex',
+          role: 'assistant',
+          text: 'I would use the full display with clear hierarchy, generous spacing, visible navigation hints, and pagination that keeps every response readable. Compact mode can show more content, while Large mode prioritizes comfort.',
+        },
+      ]
+    } else {
+      const result = await codexApi.getThread(currentThread.id)
+      messages = result.messages
+    }
   }
   selectedMessageIndex = Math.max(0, messages.length - 1)
+  selectedMessagePage = messagePages(messages[selectedMessageIndex]).length - 1
   await showChat()
+}
+
+function messagePages(message?: ChatMessage) {
+  if (!message) return [['']]
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+  if (!context) return [[short(message.text, 500)]]
+  const type = typography(textSize)
+  setFont(context, type.body)
+  const lines = wrapText(context, message.text, 552)
+  const linesPerPage = Math.max(3, Math.floor(180 / type.line))
+  const pages: string[][] = []
+  for (let index = 0; index < lines.length; index += linesPerPage) pages.push(lines.slice(index, index + linesPerPage))
+  return pages.length ? pages : [['']]
 }
 
 async function showChat() {
   screen = 'chat'
   if (!currentThread) return showThreads()
   if (messages.length === 0) {
-    await renderText(short(currentThread.title, 48), 'No messages yet.\n\nTap to type or hold to talk.', `tap type  • hold talk  • double back  • ${inputLabel()}`)
+    await renderText(currentThread.title, 'No messages yet.\n\nTap to type or hold to talk.', `● Type   Hold Voice   ●● Back   ${inputLabel()}`)
     return
   }
   selectedMessageIndex = Math.max(0, Math.min(selectedMessageIndex, messages.length - 1))
   const message = messages[selectedMessageIndex]
+  const pages = messagePages(message)
+  selectedMessagePage = Math.max(0, Math.min(selectedMessagePage, pages.length - 1))
   const role = message.role === 'assistant' ? 'CODEX' : 'YOU'
-  await renderText(
-    `${role}  ${selectedMessageIndex + 1}/${messages.length}`,
-    short(message.text, 410),
-    '↕ messages  • tap type  • hold talk  • double back',
-  )
+  await display.render(context => {
+    const type = typography(textSize)
+    const pageMeta = pages.length > 1 ? ` • page ${selectedMessagePage + 1}/${pages.length}` : ''
+    drawHeader(context, currentThread?.title || 'Chat', `${selectedMessageIndex + 1}/${messages.length}${pageMeta}`)
+    context.fillStyle = message.role === 'assistant' ? '#ffffff' : '#a8a8a8'
+    setFont(context, type.small, 700)
+    context.fillText(role, 12, 59)
+    context.fillStyle = '#ffffff'
+    setFont(context, type.body)
+    pages[selectedMessagePage].forEach((line, index) => context.fillText(line, 12, 79 + index * type.line))
+    drawFooter(context, '↕ Read   ● Type   Hold Voice   ●● Chats')
+  })
 }
 
 async function showCompose() {
   screen = 'compose'
-  const draft = keyboard.draft || '…'
-  await renderText(
-    `TYPE  • ${keyboard.level.toUpperCase()}`,
-    `${short(draft, 250)}\n\n${keyboard.selection}`,
-    '↕ choose  • tap select  • double erase  • hold send',
-  )
+  await display.render(context => {
+    const type = typography(textSize)
+    drawHeader(context, 'Compose', keyboard.pendingCharacter ? `Tap cycles: ${keyboard.selectedKey.label}` : 'Multi-tap keyboard')
+    context.fillStyle = '#ffffff'
+    setFont(context, type.body)
+    const draft = keyboard.displayDraft || 'Start typing…'
+    const lines = wrapText(context, draft, 552).slice(-Math.max(2, Math.floor(104 / type.line)))
+    lines.forEach((line, index) => context.fillText(line, 12, 61 + index * type.line))
+
+    const keys = keyboard.keys
+    const visible = textSize === 'large' ? 3 : 5
+    const half = Math.floor(visible / 2)
+    const indices = Array.from({ length: visible }, (_, offset) => (keyboard.selectedKeyIndex - half + offset + keys.length) % keys.length)
+    const gap = 6
+    const width = Math.floor((552 - gap * (visible - 1)) / visible)
+    indices.forEach((keyIndex, offset) => {
+      const selected = keyIndex === keyboard.selectedKeyIndex
+      const x = 12 + offset * (width + gap)
+      const y = 179
+      context.fillStyle = selected ? '#ffffff' : '#242424'
+      context.fillRect(x, y, width, 52)
+      context.strokeStyle = selected ? '#ffffff' : '#686868'
+      context.lineWidth = selected ? 2 : 1
+      context.strokeRect(x, y, width, 52)
+      context.fillStyle = selected ? '#000000' : '#c0c0c0'
+      setFont(context, selected ? type.body : type.small, selected ? 700 : 600)
+      context.textAlign = 'center'
+      context.fillText(keys[keyIndex].label, x + width / 2, y + (selected ? 14 : 17))
+      context.textAlign = 'left'
+    })
+    drawFooter(context, '↕ Key   ● Cycle letter   ●● Delete   Hold Send')
+  })
+}
+
+async function saveSettings() {
+  await bridge.setLocalStorage(SETTINGS_STORAGE_KEY, JSON.stringify({ textSize }))
+}
+
+async function showSettings() {
+  screen = 'settings'
+  const items = [
+    { title: 'Text size', value: textSize.toUpperCase() },
+    { title: 'Display', value: '576×288 • 16 levels' },
+    { title: 'Back to chats', value: '' },
+  ]
+  selectedSettingsIndex = Math.max(0, Math.min(selectedSettingsIndex, items.length - 1))
+  await display.render(context => {
+    const type = typography(textSize)
+    drawHeader(context, 'Settings')
+    items.forEach((item, index) => {
+      const selected = index === selectedSettingsIndex
+      const y = 62 + index * 58
+      if (selected) {
+        context.fillStyle = '#242424'
+        context.fillRect(8, y - 5, 560, 48)
+        context.strokeStyle = '#ffffff'
+        context.lineWidth = 2
+        context.strokeRect(8, y - 5, 560, 48)
+      }
+      context.fillStyle = selected ? '#ffffff' : '#c8c8c8'
+      setFont(context, Math.min(type.body, 19), selected ? 700 : 600)
+      context.fillText(item.title, 18, y + 4)
+      context.fillStyle = '#9a9a9a'
+      setFont(context, Math.min(type.small, 14), 600)
+      context.textAlign = 'right'
+      context.fillText(item.value, 554, y + 8)
+      context.textAlign = 'left'
+    })
+    drawFooter(context, '↕ Navigate   ● Change/Open   ●● Chats')
+  })
 }
 
 async function beginVoice() {
@@ -240,6 +363,8 @@ async function finishVoice() {
 }
 
 async function sendDraft() {
+  window.clearTimeout(keyboardCommitTimer)
+  keyboard.commitPending()
   const text = keyboard.draft.trim()
   if (!text || !currentThread) return
   screen = 'sending'
@@ -474,10 +599,25 @@ async function onMove(delta: number) {
   if (screen === 'threads') {
     selectedThreadIndex += delta
     await showThreads()
+  } else if (screen === 'settings') {
+    selectedSettingsIndex += delta
+    await showSettings()
   } else if (screen === 'chat') {
-    selectedMessageIndex += delta
+    if (delta < 0) {
+      if (selectedMessagePage > 0) selectedMessagePage -= 1
+      else if (selectedMessageIndex > 0) {
+        selectedMessageIndex -= 1
+        selectedMessagePage = messagePages(messages[selectedMessageIndex]).length - 1
+      }
+    } else if (selectedMessagePage < messagePages(messages[selectedMessageIndex]).length - 1) {
+      selectedMessagePage += 1
+    } else if (selectedMessageIndex < messages.length - 1) {
+      selectedMessageIndex += 1
+      selectedMessagePage = 0
+    }
     await showChat()
   } else if (screen === 'compose') {
+    window.clearTimeout(keyboardCommitTimer)
     keyboard.move(delta)
     await showCompose()
   }
@@ -486,23 +626,43 @@ async function onMove(delta: number) {
 async function onClick() {
   if (Date.now() < ignoreClicksUntil) return
   if (screen === 'threads') await openSelectedThread()
+  else if (screen === 'settings') {
+    if (selectedSettingsIndex === 0) {
+      const index = TEXT_SIZE_OPTIONS.indexOf(textSize)
+      textSize = TEXT_SIZE_OPTIONS[(index + 1) % TEXT_SIZE_OPTIONS.length]
+      await saveSettings()
+      await showSettings()
+    } else if (selectedSettingsIndex === 2) {
+      await showThreads()
+    }
+  }
   else if (screen === 'chat') {
     keyboard.reset()
     await showCompose()
   } else if (screen === 'compose') {
-    keyboard.select()
+    window.clearTimeout(keyboardCommitTimer)
+    const hasPending = keyboard.tap()
     await showCompose()
+    if (hasPending) {
+      keyboardCommitTimer = window.setTimeout(() => {
+        keyboard.commitPending()
+        void showCompose().catch(showError)
+      }, 750)
+    }
   }
 }
 
 async function onDoubleClick() {
   if (screen === 'threads' || screen === 'setup' || screen === 'error') {
     await bridge.shutDownPageContainer(1)
+  } else if (screen === 'settings') {
+    await showThreads()
   } else if (screen === 'chat') {
-    selectedThreadIndex = Math.max(0, threads.findIndex(thread => thread.id === currentThread?.id) + 1)
+    selectedThreadIndex = Math.max(0, threads.findIndex(thread => thread.id === currentThread?.id) + 2)
     await showThreads()
   } else if (screen === 'compose') {
-    if (keyboard.draft || keyboard.level === 'character') {
+    window.clearTimeout(keyboardCommitTimer)
+    if (keyboard.draft || keyboard.pendingCharacter) {
       keyboard.backspace()
       await showCompose()
     } else {
@@ -531,12 +691,13 @@ const unsubscribe = bridge.onEvenHubEvent(event => {
     if (type === OsEventTypeList.SCROLL_BOTTOM_EVENT) return onMove(1)
     if (type === OsEventTypeList.CLICK_EVENT) return onClick()
   }
-  void run().catch(showError)
+  eventQueue = eventQueue.then(run).catch(showError)
 })
 
 function cleanup() {
   if (cleanedUp) return
   cleanedUp = true
+  window.clearTimeout(keyboardCommitTimer)
   stopLiveScanner()
   if (pairPollTimer !== null) window.clearInterval(pairPollTimer)
   bridge.audioControl(false)
@@ -547,7 +708,27 @@ window.addEventListener('beforeunload', cleanup)
 
 async function boot() {
   screen = 'boot'
+  const serializedSettings = await bridge.getLocalStorage(SETTINGS_STORAGE_KEY).catch(() => '')
+  if (serializedSettings) {
+    try {
+      const saved = JSON.parse(serializedSettings) as { textSize?: TextSize }
+      if (saved.textSize && TEXT_SIZE_OPTIONS.includes(saved.textSize)) textSize = saved.textSize
+    } catch {
+      await bridge.setLocalStorage(SETTINGS_STORAGE_KEY, '')
+    }
+  }
   await renderText('CODEX LENS', 'Connecting securely…', 'Checking saved pairing')
+  if (demoMode) {
+    threads = [
+      { id: 'demo-1', title: 'G2 interface redesign', preview: 'Improve layout, keyboard, and settings', updatedAt: Date.now() },
+      { id: 'demo-2', title: 'QR pairing improvements', preview: 'Camera decoding and onboarding', updatedAt: Date.now() - 3_600_000 },
+      { id: 'demo-3', title: 'Companion deployment', preview: 'Host the Windows setup flow', updatedAt: Date.now() - 86_400_000 },
+      { id: 'demo-4', title: 'Voice input architecture', preview: 'Use the G2 microphone securely', updatedAt: Date.now() - 172_800_000 },
+    ]
+    selectedThreadIndex = 2
+    await showThreads()
+    return
+  }
   const serialized = await bridge.getLocalStorage(PAIRING_STORAGE_KEY).catch(() => '')
   if (serialized) {
     try {

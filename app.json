@@ -2,11 +2,11 @@
   "package_id": "com.samwolfsdell.codexlens",
   "edition": "202601",
   "name": "Codex Lens",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "min_app_version": "2.2.9",
   "min_sdk_version": "0.0.14",
   "tagline": "Your Codex chats on Even G2",
-  "description": "Use your own Codex account from Even G2 and R1. Setup: install the companion, confirm or sign into your own account, then tap Scan companion QR and allow camera access. Codex Lens uses a live scanner where supported and Even's native camera otherwise. Multi-pass decoding handles monitor glare, rotation, crops, and contrast. Then browse chats, speak, or type entirely on the glasses. No developer account is bundled.",
+  "description": "Use your own Codex account from Even G2 and R1. Browse newest chats first in a redesigned full-display interface, read complete paginated replies, use push-to-talk, or type with the faster multi-tap keyboard. Settings include Compact, Standard, and Large text modes. Setup stays simple: install the companion, sign into your own account, then scan its QR. No developer account is bundled.",
   "author": "Sam Wolfsdell",
   "entrypoint": "index.html",
   "permissions": [

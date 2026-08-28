@@ -1,6 +1,6 @@
 # Codex Lens for Even G2
 
-Codex Lens lets an Even G2 and R1 owner use their own Codex account from the glasses. It supports existing Codex chats, push-to-talk voice prompts, and gesture-based text entry without typing on the phone.
+Codex Lens lets an Even G2 and R1 owner use their own Codex account from the glasses. It supports newest-first Codex chats, complete paginated replies, push-to-talk voice prompts, and gesture-based text entry without typing on the phone.
 
 ## User setup
 
@@ -8,7 +8,9 @@ Codex Lens lets an Even G2 and R1 owner use their own Codex account from the gla
 2. Install it, select **Sign in to Codex**, and complete the official Codex sign-in in the browser.
 3. Install **Codex Lens** from Even Hub and open it on the phone.
 4. Tap **Scan companion QR** and allow camera access when Even Realities asks. The app uses live scanning when the phone WebView supports it and otherwise opens Even's native camera to read the one-time QR locally.
-5. Put on the G2. Scroll and tap to browse or type; hold the R1 or temple to speak.
+5. Put on the G2. Scroll and tap to browse or type; hold the R1 or temple to speak. Open **Settings** near the top of the chat list to choose Compact, Standard, or Large text.
+
+The composer uses multi-tap input: swipe to select a letter group, tap repeatedly to cycle its letters, pause briefly to commit, double-tap to delete, and hold to send.
 
 The companion must remain open while the glasses app is in use.
 

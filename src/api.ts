@@ -10,7 +10,7 @@ export type SavedConnection = PairingQr & {
   sessionId: string
 }
 
-export type CodexThread = { id: string; title: string; preview: string; updatedAt?: number }
+export type CodexThread = { id: string; title: string; preview: string; updatedAt?: string | number }
 export type ChatMessage = { id: string; role: 'user' | 'assistant'; text: string }
 
 let connection: SavedConnection | null = null
