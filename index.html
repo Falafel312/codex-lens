@@ -27,11 +27,20 @@
       li { position: relative; margin: 10px 0; padding: 13px 14px 13px 48px; background: #2c2c2c; border-radius: 12px; text-align: left; }
       li::before { counter-increment: steps; content: counter(steps); position: absolute; left: 14px; top: 12px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: #e7ff69; color: #111; font-weight: 900; }
       li span { display: block; color: #aeb5be; font-size: 12px; }
+      a { color: inherit; }
+      .download { display: block; margin: 10px 0 4px; border-radius: 999px; padding: 12px 16px; background: #e7ff69; color: #111; font-weight: 900; text-align: center; text-decoration: none; }
+      .download-url { display: block; margin-top: 6px; color: #b9dcff; font-size: 11px; overflow-wrap: anywhere; }
       button { width: 100%; margin-top: 16px; border: 0; border-radius: 999px; padding: 14px 18px; background: #e7ff69; color: #111; font: inherit; font-weight: 900; }
       button:disabled { opacity: .55; }
       button.secondary { background: transparent; color: #d7dee8; border: 1px solid #656c75; }
       #status { display: block; margin-top: 16px; color: #b9dcff; min-height: 40px; }
       .privacy { color: #8e969f; font-size: 11px; margin-top: 18px; }
+      #qr-scanner { margin-top: 16px; padding: 12px; border: 1px solid #656c75; border-radius: 16px; background: #151515; }
+      #qr-scanner[hidden] { display: none; }
+      .camera-frame { position: relative; overflow: hidden; border-radius: 12px; aspect-ratio: 4 / 3; background: #050505; }
+      #qr-video { width: 100%; height: 100%; object-fit: cover; }
+      .scan-target { position: absolute; inset: 16%; border: 3px solid #e7ff69; border-radius: 18px; box-shadow: 0 0 0 999px #0007; }
+      .scanner-help { margin: 10px 4px 0; color: #c9d0d8; font-size: 12px; text-align: center; }
     </style>
   </head>
   <body>
@@ -40,11 +49,23 @@
       <h1>Connect Codex Lens</h1>
       <p class="intro">Your own Codex account, chats, and plan—never the developer's account.</p>
       <ol>
-        <li>Install the PC companion<span>Download and open Codex Lens Companion on Windows.</span></li>
+        <li>Install the PC companion
+          <span>Download and open Codex Lens Companion on Windows.</span>
+          <a class="download" href="https://codex-lens-production.up.railway.app" target="_blank" rel="noopener noreferrer">Download companion for Windows</a>
+          <a class="download-url" href="https://codex-lens-production.up.railway.app" target="_blank" rel="noopener noreferrer">codex-lens-production.up.railway.app</a>
+        </li>
         <li>Sign into your Codex account<span>The companion opens the official Codex sign-in in your browser.</span></li>
-        <li>Scan the companion QR<span>Tap below and photograph the QR shown on your PC.</span></li>
+        <li>Scan the companion QR<span>Start the live scanner and point your phone at the QR shown on your PC.</span></li>
       </ol>
-      <button id="scan-qr" hidden>Scan companion QR</button>
+      <button id="scan-qr" hidden>Start live QR scanner</button>
+      <section id="qr-scanner" hidden>
+        <div class="camera-frame">
+          <video id="qr-video" autoplay muted playsinline></video>
+          <div class="scan-target" aria-hidden="true"></div>
+        </div>
+        <p class="scanner-help">Keep the companion QR inside the frame. Pairing happens automatically.</p>
+        <button id="cancel-scan" class="secondary">Cancel scanner</button>
+      </section>
       <button id="reset-pairing" class="secondary" hidden>Pair a different account</button>
       <span id="status">Connecting to Even G2…</span>
       <p class="privacy">Your OpenAI login stays on your PC. Prompts and replies are end-to-end encrypted; the hosted relay only routes encrypted data.</p>
