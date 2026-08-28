@@ -14,7 +14,7 @@
         <div>
           <p class="eyebrow">EVEN G2 + R1</p>
           <h1>Codex Lens Companion</h1>
-          <p>Your Codex login and chat history stay on this computer.</p>
+          <p>Each person uses the Codex login stored in their own Windows profile. No account is bundled with this installer.</p>
         </div>
       </header>
 
@@ -33,7 +33,8 @@
               <span>One-time code</span><strong id="login-code"></strong>
             </div>
             <button id="sign-in">Sign in to Codex</button>
-            <button id="sign-out" class="secondary hidden">Sign out</button>
+            <button id="use-account" class="hidden">Continue with this account</button>
+            <button id="sign-out" class="secondary hidden">Sign out / use a different account</button>
           </div>
         </article>
 
@@ -47,7 +48,7 @@
                 <li>Tap <strong>Scan companion QR</strong> on the phone.</li>
                 <li>Point the phone camera at this code.</li>
               </ol>
-              <p class="privacy">Only a short-lived pairing secret is in this QR—never your OpenAI password or token.</p>
+              <p class="privacy">The phone scans this code live; it does not save a photo. Only a short-lived pairing secret is in the QR—never your OpenAI password or token.</p>
               <button id="retry" class="secondary">Refresh connection</button>
             </div>
             <div class="qr-card">

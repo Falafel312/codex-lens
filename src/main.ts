@@ -27,6 +27,10 @@ type Screen = 'boot' | 'setup' | 'threads' | 'chat' | 'compose' | 'recording' | 
 const statusElement = document.querySelector<HTMLElement>('#status')
 const scanButton = document.querySelector<HTMLButtonElement>('#scan-qr')
 const resetButton = document.querySelector<HTMLButtonElement>('#reset-pairing')
+const scannerPanel = document.querySelector<HTMLElement>('#qr-scanner')
+const scannerVideo = document.querySelector<HTMLVideoElement>('#qr-video')
+const cancelScanButton = document.querySelector<HTMLButtonElement>('#cancel-scan')
+const PAIRING_STORAGE_KEY = 'codex-lens-connection-v2'
 const setPhoneStatus = (message: string) => {
   if (statusElement) statusElement.textContent = message
 }
@@ -100,6 +104,7 @@ let pairPollTimer: number | null = null
 let lastInputSource = 'G2'
 let ignoreClicksUntil = 0
 let cleanedUp = false
+let scannerStream: MediaStream | null = null
 
 function short(text: string, limit = 245) {
   const normalized = text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
@@ -248,51 +253,104 @@ async function sendDraft() {
 
 async function showSetup() {
   screen = 'setup'
-  setPhoneStatus('Step 3: tap “Scan companion QR” below.')
+  setPhoneStatus('Step 3: start the live scanner and point it at the companion QR.')
   if (scanButton) scanButton.hidden = false
   if (resetButton) resetButton.hidden = true
   await renderText(
     'CONNECT CODEX LENS',
-    'Finish setup on your phone.\n\nTap “Scan companion QR” and photograph the QR shown on your PC.',
+    'Finish setup on your phone.\n\nStart the live QR scanner and point it at the code shown on your PC.',
     'Keep Codex Lens Companion open',
   )
 }
 
-async function decodeQrFromCamera() {
-  const asset = await bridge.captureImageFromCamera()
-  if (!asset) throw new Error('No photo was captured. Tap scan and try again.')
-  const source = asset.base64.startsWith('data:')
-    ? asset.base64
-    : `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`
-  const image = new Image()
-  image.src = source
-  await new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve()
-    image.onerror = () => reject(new Error('The QR photo could not be opened.'))
-  })
+function stopLiveScanner() {
+  scannerStream?.getTracks().forEach(track => track.stop())
+  scannerStream = null
+  if (scannerVideo) scannerVideo.srcObject = null
+  if (scannerPanel) scannerPanel.hidden = true
+}
+
+async function decodeQrFromLiveCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('Live camera scanning is not supported by this version of the Even phone app. Update the app and try again.')
+  }
+  if (!scannerVideo || !scannerPanel || !cancelScanButton) throw new Error('The live QR scanner could not start.')
+
+  scannerPanel.hidden = false
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    })
+  } catch (error) {
+    scannerPanel.hidden = true
+    if (error instanceof DOMException && ['NotAllowedError', 'SecurityError'].includes(error.name)) {
+      throw new Error('Camera access was denied. Allow camera access for Codex Lens in the Even app settings, then try again.')
+    }
+    throw new Error('The phone camera could not be opened for live QR scanning.')
+  }
+
+  scannerVideo.srcObject = scannerStream
+  await scannerVideo.play()
   const canvas = document.createElement('canvas')
-  canvas.width = image.naturalWidth
-  canvas.height = image.naturalHeight
   const context = canvas.getContext('2d', { willReadFrequently: true })
   if (!context) throw new Error('The QR scanner is unavailable on this phone.')
-  context.drawImage(image, 0, 0)
-  const pixels = context.getImageData(0, 0, canvas.width, canvas.height)
-  const result = jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: 'attemptBoth' })
-  if (!result?.data) throw new Error('No QR code was found. Fill the camera view with the QR and keep the phone steady.')
-  return result.data
+
+  return new Promise<string>((resolve, reject) => {
+    let timer = 0
+    let finished = false
+    const finish = (value?: string, error?: Error) => {
+      if (finished) return
+      finished = true
+      window.clearTimeout(timer)
+      cancelScanButton.removeEventListener('click', cancel)
+      if (error) reject(error)
+      else resolve(value || '')
+    }
+    const cancel = () => finish(undefined, new Error('QR scan cancelled.'))
+    const startedAt = Date.now()
+    const scanFrame = () => {
+      if (finished) return
+      if (Date.now() - startedAt > 90_000) {
+        finish(undefined, new Error('No QR code was found. Keep the full companion QR inside the frame and try again.'))
+        return
+      }
+      const sourceWidth = scannerVideo.videoWidth
+      const sourceHeight = scannerVideo.videoHeight
+      if (sourceWidth > 0 && sourceHeight > 0) {
+        canvas.width = Math.min(sourceWidth, 960)
+        canvas.height = Math.max(1, Math.round((sourceHeight / sourceWidth) * canvas.width))
+        context.drawImage(scannerVideo, 0, 0, canvas.width, canvas.height)
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height)
+        const result = jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: 'attemptBoth' })
+        if (result?.data) {
+          finish(result.data)
+          return
+        }
+      }
+      timer = window.setTimeout(scanFrame, 120)
+    }
+    cancelScanButton.addEventListener('click', cancel)
+    scanFrame()
+  })
 }
 
 async function scanAndPair() {
   if (scanButton) scanButton.disabled = true
-  setPhoneStatus('Opening camera…')
+  setPhoneStatus('Opening live QR scanner…')
   try {
-    const qr = parsePairingQr(await decodeQrFromCamera())
+    const qr = parsePairingQr(await decodeQrFromLiveCamera())
     setPhoneStatus('Connecting securely…')
     const saved = await claimPairing(qr)
-    await bridge.setLocalStorage('codex-lens-connection', JSON.stringify(saved))
+    await bridge.setLocalStorage(PAIRING_STORAGE_KEY, JSON.stringify(saved))
     await renderText('CONNECTED', 'Your Codex account is ready.', 'Loading conversations…')
     await loadThreads()
   } finally {
+    stopLiveScanner()
     if (scanButton) scanButton.disabled = false
   }
 }
@@ -384,6 +442,7 @@ const unsubscribe = bridge.onEvenHubEvent(event => {
 function cleanup() {
   if (cleanedUp) return
   cleanedUp = true
+  stopLiveScanner()
   if (pairPollTimer !== null) window.clearInterval(pairPollTimer)
   bridge.audioControl(false)
   unsubscribe()
@@ -394,14 +453,14 @@ window.addEventListener('beforeunload', cleanup)
 async function boot() {
   screen = 'boot'
   await renderText('CODEX LENS', 'Connecting securely…', 'Checking saved pairing')
-  const serialized = await bridge.getLocalStorage('codex-lens-connection').catch(() => '')
+  const serialized = await bridge.getLocalStorage(PAIRING_STORAGE_KEY).catch(() => '')
   if (serialized) {
     try {
       useConnection(JSON.parse(serialized) as SavedConnection)
       await loadThreads()
       return
     } catch {
-      await bridge.setLocalStorage('codex-lens-connection', '')
+      await bridge.setLocalStorage(PAIRING_STORAGE_KEY, '')
     }
   }
   await showSetup()
@@ -409,7 +468,7 @@ async function boot() {
 
 scanButton?.addEventListener('click', () => void scanAndPair().catch(showError))
 resetButton?.addEventListener('click', () => {
-  void bridge.setLocalStorage('codex-lens-connection', '').then(showSetup).catch(showError)
+  void bridge.setLocalStorage(PAIRING_STORAGE_KEY, '').then(showSetup).catch(showError)
 })
 
 void boot().catch(showError)

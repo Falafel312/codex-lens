@@ -51,7 +51,7 @@ export class CodexAppServer extends EventEmitter {
 
     await spawned
     await this.request('initialize', {
-      clientInfo: { name: 'codex_lens_g2', title: 'Codex Lens for Even G2', version: '0.2.0' },
+      clientInfo: { name: 'codex_lens_g2', title: 'Codex Lens for Even G2', version: '0.2.1' },
       capabilities: { experimentalApi: true },
     })
     this.notify('initialized')

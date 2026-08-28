@@ -4,7 +4,7 @@ Codex Lens lets an Even G2 and R1 owner use their own Codex account from the gla
 
 ## User setup
 
-1. [Download Codex Lens Companion for Windows](https://github.com/Falafel312/codex-lens/releases/latest/download/Codex-Lens-Companion-Setup-0.2.0.exe).
+1. [Download Codex Lens Companion for Windows](https://github.com/Falafel312/codex-lens/releases/latest/download/Codex-Lens-Companion-Setup-0.2.1.exe).
 2. Install it, select **Sign in to Codex**, and complete the official Codex sign-in in the browser.
 3. Install **Codex Lens** from Even Hub and open it on the phone.
 4. Tap **Scan companion QR** and photograph the one-time QR shown on the PC.

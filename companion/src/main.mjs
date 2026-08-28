@@ -9,8 +9,8 @@ import QRCode from 'qrcode'
 import WebSocket from 'ws'
 import { CodexService } from './codex-service.mjs'
 
-const RELAY_WS = process.env.CODEX_LENS_RELAY_WS || 'ws://127.0.0.1:8790/companion'
-const RELAY_HTTPS = process.env.CODEX_LENS_RELAY_HTTPS || 'http://127.0.0.1:8790'
+const RELAY_WS = process.env.CODEX_LENS_RELAY_WS || 'wss://codex-lens-production.up.railway.app/companion'
+const RELAY_HTTPS = process.env.CODEX_LENS_RELAY_HTTPS || 'https://codex-lens-production.up.railway.app'
 const deviceConfigPath = () => path.join(app.getPath('userData'), 'device.json')
 
 let window
@@ -20,12 +20,15 @@ let relaySocket
 let reconnectTimer
 let device
 let pairSecret
+let accountIdentity = ''
+let accountApproved = false
 const sessionSecrets = new Map()
 let login
 let state = {
   codex: 'starting',
   relay: 'offline',
   account: null,
+  accountApproved: false,
   qrDataUrl: '',
   pairCode: '',
   loginCode: '',
@@ -103,12 +106,24 @@ async function loadAppServerClass() {
   return (await import(pathToFileURL(source).href)).CodexAppServer
 }
 
-async function refreshAccount() {
+async function refreshAccount({ approve = false } = {}) {
   try {
     const account = await codexService.account()
-    emitState({ account, codex: account ? 'ready' : 'signed-out', error: '' })
+    const identity = account ? String(account.email || account.id || account.name || 'signed-in') : ''
+    if (!account) accountApproved = false
+    else if (approve) accountApproved = true
+    else if (identity !== accountIdentity) accountApproved = false
+    accountIdentity = identity
+    emitState({
+      account,
+      accountApproved,
+      codex: account ? (accountApproved ? 'ready' : 'awaiting-confirmation') : 'signed-out',
+      error: '',
+    })
   } catch (error) {
-    emitState({ account: null, codex: 'error', error: error.message })
+    accountApproved = false
+    accountIdentity = ''
+    emitState({ account: null, accountApproved: false, codex: 'error', error: error.message })
   }
 }
 
@@ -117,9 +132,10 @@ async function startCodex() {
   appServer = new CodexAppServer({ command: nativeCodexPath(), cwd: homedir() })
   appServer.on('account/login/completed', async result => {
     if (!result?.success) return emitState({ codex: 'signed-out', error: result?.error || 'Sign-in was not completed.' })
+    const userStartedThisLogin = Boolean(login)
     login = null
     emitState({ loginCode: '', loginUrl: '' })
-    await refreshAccount()
+    await refreshAccount({ approve: userStartedThisLogin })
   })
   appServer.on('exit', error => emitState({ codex: 'error', error: error.message }))
   await appServer.start()
@@ -186,7 +202,7 @@ async function connectRelay() {
     }
     if (message.type !== 'request' || !message.id || !message.sessionId || !message.envelope) return
     try {
-      if (!state.account) throw new Error('Sign in to Codex in the desktop companion first.')
+      if (!state.account || !state.accountApproved) throw new Error('Confirm your Codex account in the desktop companion first.')
       const secret = sessionSecrets.get(message.sessionId)
       if (!secret) throw new Error('This pairing is no longer active. Scan the current QR code again.')
       const request = decryptJson(secret, message.envelope)
@@ -246,7 +262,15 @@ ipcMain.handle('account:sign-in', async () => {
   if (login.verificationUrl) await shell.openExternal(login.verificationUrl)
   return state
 })
+ipcMain.handle('account:approve', async () => {
+  if (!state.account) throw new Error('Sign in to Codex first.')
+  accountApproved = true
+  emitState({ accountApproved: true, codex: 'ready', error: '' })
+  return state
+})
 ipcMain.handle('account:sign-out', async () => {
+  accountApproved = false
+  accountIdentity = ''
   await codexService.logout()
   await refreshAccount()
   return state
