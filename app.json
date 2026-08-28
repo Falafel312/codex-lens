@@ -2,11 +2,11 @@
   "package_id": "com.samwolfsdell.codexlens",
   "edition": "202601",
   "name": "Codex Lens",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "min_app_version": "2.2.9",
   "min_sdk_version": "0.0.14",
   "tagline": "Your Codex chats on Even G2",
-  "description": "Use your own Codex account from Even G2 and R1. Setup: 1) open Codex Lens and use its visible Windows download link, 2) install the companion and confirm or sign into your own Codex account, 3) start the live QR scanner and point your phone at the companion QR. Then browse chats, hold the ring or temple to speak, or tap and scroll to type entirely on the glasses. No developer account is bundled. Your OpenAI login stays on your PC; prompts and replies are end-to-end encrypted.",
+  "description": "Use your own Codex account from Even G2 and R1. Setup: 1) open Codex Lens and use its visible Windows download link, 2) install the companion and confirm or sign into your own Codex account, 3) tap Scan companion QR and allow camera access when Even Realities asks. Codex Lens uses a live scanner when the phone WebView supports it and otherwise opens Even's native camera scanner. Then browse chats, speak, or type entirely on the glasses. No developer account is bundled.",
   "author": "Sam Wolfsdell",
   "entrypoint": "index.html",
   "permissions": [
@@ -21,7 +21,7 @@
     },
     {
       "name": "camera",
-      "desc": "Use the phone camera as a live QR scanner to pair with Codex Lens Companion. No photo is saved."
+      "desc": "Ask for phone-camera access when the user taps Scan companion QR. Decode the pairing QR locally; Codex Lens does not upload or retain the image."
     }
   ],
   "supported_languages": ["en"]

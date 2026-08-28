@@ -55,9 +55,9 @@
           <a class="download-url" href="https://codex-lens-production.up.railway.app" target="_blank" rel="noopener noreferrer">codex-lens-production.up.railway.app</a>
         </li>
         <li>Sign into your Codex account<span>The companion opens the official Codex sign-in in your browser.</span></li>
-        <li>Scan the companion QR<span>Start the live scanner and point your phone at the QR shown on your PC.</span></li>
+        <li>Scan the companion QR<span>Tap below and allow camera access when Even Realities asks.</span></li>
       </ol>
-      <button id="scan-qr" hidden>Start live QR scanner</button>
+      <button id="scan-qr" hidden>Scan companion QR</button>
       <section id="qr-scanner" hidden>
         <div class="camera-frame">
           <video id="qr-video" autoplay muted playsinline></video>
@@ -68,7 +68,7 @@
       </section>
       <button id="reset-pairing" class="secondary" hidden>Pair a different account</button>
       <span id="status">Connecting to Even G2…</span>
-      <p class="privacy">Your OpenAI login stays on your PC. Prompts and replies are end-to-end encrypted; the hosted relay only routes encrypted data.</p>
+      <p class="privacy">Camera access is requested by the Even Realities phone app only when you scan. Codex Lens does not upload or retain the QR image. Your OpenAI login stays on your PC.</p>
     </main></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

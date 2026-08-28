@@ -253,12 +253,12 @@ async function sendDraft() {
 
 async function showSetup() {
   screen = 'setup'
-  setPhoneStatus('Step 3: start the live scanner and point it at the companion QR.')
+  setPhoneStatus('Step 3: tap Scan companion QR. Allow camera access when Even asks.')
   if (scanButton) scanButton.hidden = false
   if (resetButton) resetButton.hidden = true
   await renderText(
     'CONNECT CODEX LENS',
-    'Finish setup on your phone.\n\nStart the live QR scanner and point it at the code shown on your PC.',
+    'Finish setup on your phone.\n\nTap Scan companion QR, allow camera access, and point the phone at the code shown on your PC.',
     'Keep Codex Lens Companion open',
   )
 }
@@ -270,9 +270,34 @@ function stopLiveScanner() {
   if (scannerPanel) scannerPanel.hidden = true
 }
 
-async function decodeQrFromLiveCamera() {
+async function decodeQrFromNativeCamera() {
+  setPhoneStatus('Allow camera access for Even Realities, then point the camera at the companion QR.')
+  const asset = await bridge.captureImageFromCamera()
+  if (!asset) throw new Error('Camera scan cancelled. Tap Scan companion QR to try again.')
+  const source = asset.base64.startsWith('data:')
+    ? asset.base64
+    : `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`
+  const image = new Image()
+  image.src = source
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve()
+    image.onerror = () => reject(new Error('The camera image could not be opened.'))
+  })
+  const canvas = document.createElement('canvas')
+  canvas.width = image.naturalWidth
+  canvas.height = image.naturalHeight
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) throw new Error('The QR scanner is unavailable on this phone.')
+  context.drawImage(image, 0, 0)
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height)
+  const result = jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: 'attemptBoth' })
+  if (!result?.data) throw new Error('No QR code was found. Fill the camera view with the companion QR and try again.')
+  return result.data
+}
+
+async function decodeQrFromLiveCamera(): Promise<string | null> {
   if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error('Live camera scanning is not supported by this version of the Even phone app. Update the app and try again.')
+    return null
   }
   if (!scannerVideo || !scannerPanel || !cancelScanButton) throw new Error('The live QR scanner could not start.')
 
@@ -288,10 +313,8 @@ async function decodeQrFromLiveCamera() {
     })
   } catch (error) {
     scannerPanel.hidden = true
-    if (error instanceof DOMException && ['NotAllowedError', 'SecurityError'].includes(error.name)) {
-      throw new Error('Camera access was denied. Allow camera access for Codex Lens in the Even app settings, then try again.')
-    }
-    throw new Error('The phone camera could not be opened for live QR scanning.')
+    console.warn('Live WebView camera is unavailable; using the Even native camera bridge.', error)
+    return null
   }
 
   scannerVideo.srcObject = scannerStream
@@ -339,11 +362,18 @@ async function decodeQrFromLiveCamera() {
   })
 }
 
+async function decodeQrFromPhoneCamera() {
+  const liveResult = await decodeQrFromLiveCamera()
+  if (liveResult) return liveResult
+  stopLiveScanner()
+  return decodeQrFromNativeCamera()
+}
+
 async function scanAndPair() {
   if (scanButton) scanButton.disabled = true
-  setPhoneStatus('Opening live QR scanner…')
+  setPhoneStatus('Opening QR scanner…')
   try {
-    const qr = parsePairingQr(await decodeQrFromLiveCamera())
+    const qr = parsePairingQr(await decodeQrFromPhoneCamera())
     setPhoneStatus('Connecting securely…')
     const saved = await claimPairing(qr)
     await bridge.setLocalStorage(PAIRING_STORAGE_KEY, JSON.stringify(saved))
